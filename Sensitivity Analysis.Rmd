@@ -1,0 +1,453 @@
+---
+title: "Sensitivity Analysis"
+output: html_document
+date: "2025-05-12"
+---
+
+```{r main model}
+# Required packages
+library(dplyr)
+library(pammtools)
+library(mgcv)
+library(tidyr)
+library(ggplot2)
+library(survival)
+
+data_merged <- readRDS("~/Propofol/data/mergedAndCleanedData.Rds")
+
+# Clean and prepare raw data
+data_ordered <- data_merged %>%
+  filter(Study_Day >= 5) %>%
+  arrange(CombinedID, Study_Day) %>%
+  group_by(CombinedID) %>%
+  mutate(
+    base_state = case_when(
+      as.integer(as.character(Propofol)) == 1 ~ 1,
+      TRUE ~ 0
+    ),
+    state = case_when(
+      DaysInICU <= 11 & Study_Day < DaysInICU ~ base_state,
+      DaysInICU <= 11 & Study_Day == DaysInICU ~ case_when(
+        PatientDischarged == 1 ~ 2,
+        PatientDied == 1 ~ 3,
+        TRUE ~ base_state
+      ),
+      DaysInICU > 11 & Study_Day <= 11 ~ base_state,
+      TRUE ~ base_state
+    ),
+    from = lag(state, default = 0),
+    to = state
+  ) %>%
+  ungroup()
+
+# Construct observed transitions
+data_actual <- data_ordered %>%
+  mutate(
+    actual_transition = paste0(from, "->", to),
+    tstart = Study_Day - 1,
+    tstop = Study_Day
+  ) %>%
+  select(
+    CombinedID, tstart, tstop, from, to, actual_transition,
+    Age, BMI, ApacheIIScore, inMV2_4, Propofol2_4, EN2_4, PN2_4, OralIntake2_4,
+    Year, AdmCatID, DiagID2, Gender, CombinedicuID, DaysInICU
+  )
+
+# Add extra row to handle DaysInICU > 11
+extra_transitions <- data_ordered %>%
+  group_by(CombinedID) %>%
+  filter(Study_Day == 11) %>%
+  filter(DaysInICU > 11) %>%
+  mutate(
+    tstart = 11,
+    tstop = DaysInICU,
+    from = to,
+    to = case_when(
+      PatientDischarged == 1 ~ 2,
+      PatientDied == 1 ~ 3,
+      TRUE ~ from
+    ),
+    actual_transition = paste0(from, "->", to),
+    Study_Day = NA_integer_
+  ) %>%
+  select(
+    CombinedID, tstart, tstop, from, to, actual_transition,
+    Age, BMI, ApacheIIScore, inMV2_4, Propofol2_4, EN2_4, PN2_4, OralIntake2_4,
+    Year, AdmCatID, DiagID2, Gender, CombinedicuID, DaysInICU
+  ) %>%
+  ungroup()
+
+# Combine original and additional transition rows
+data_actual_final <- bind_rows(data_actual, extra_transitions)
+
+# Expand to all possible legal transitions
+data_expanded <- data_actual_final %>%
+  mutate(
+    possible_transitions = case_when(
+      from == 0 ~ list(c("0->1", "0->2", "0->3")),
+      from == 1 ~ list(c("1->0", "1->3")),
+      TRUE ~ list(NA_character_)
+    )
+  ) %>%
+  unnest(possible_transitions) %>%
+  mutate(
+    transition = possible_transitions,
+    status = case_when(
+      actual_transition == transition ~ 1,
+      TRUE ~ 0
+    ),
+    id = CombinedID
+  ) %>%
+  select(
+    id, tstart, tstop, from, to, transition, status,
+    Age, BMI, ApacheIIScore, inMV2_4, Propofol2_4, EN2_4, PN2_4, OralIntake2_4,
+    Year, AdmCatID, DiagID2, Gender, CombinedicuID
+  ) %>%
+  filter(!is.na(transition)) %>%
+  mutate(transition = factor(transition))
+
+# Prevent as_ped crashes: split into 1-day intervals
+expand_to_days <- function(df) {
+  df %>%
+    rowwise() %>%
+    do({
+      if (.$tstop - .$tstart > 1) {
+        tibble(
+          id = .$id,
+          from = .$from,
+          to = .$to,
+          transition = .$transition,
+          status = .$status,
+          Age = .$Age,
+          BMI = .$BMI,
+          ApacheIIScore = .$ApacheIIScore,
+          inMV2_4 = .$inMV2_4,
+          Propofol2_4 = .$Propofol2_4,
+          EN2_4 = .$EN2_4,
+          PN2_4 = .$PN2_4,
+          OralIntake2_4 = .$OralIntake2_4,
+          Year = .$Year,
+          AdmCatID = .$AdmCatID,
+          DiagID2 = .$DiagID2,
+          Gender = .$Gender,
+          CombinedicuID = .$CombinedicuID,
+          tstart = seq(.$tstart, .$tstop - 1),
+          tstop = seq(.$tstart + 1, .$tstop)
+        )
+      } else {
+        tibble(
+          id = .$id,
+          from = .$from,
+          to = .$to,
+          transition = .$transition,
+          status = .$status,
+          Age = .$Age,
+          BMI = .$BMI,
+          ApacheIIScore = .$ApacheIIScore,
+          inMV2_4 = .$inMV2_4,
+          Propofol2_4 = .$Propofol2_4,
+          EN2_4 = .$EN2_4,
+          PN2_4 = .$PN2_4,
+          OralIntake2_4 = .$OralIntake2_4,
+          Year = .$Year,
+          AdmCatID = .$AdmCatID,
+          DiagID2 = .$DiagID2,
+          Gender = .$Gender,
+          CombinedicuID = .$CombinedicuID,
+          tstart = .$tstart,
+          tstop = .$tstop
+        )
+      }
+    }) %>%
+    ungroup()
+}
+
+# Apply day-wise expansion
+data_expanded_days <- expand_to_days(data_expanded)
+
+# Convert to PED format (for PAMM modeling)
+ped_data <- as_ped(
+  data = data_expanded_days,
+  formula = Surv(tstart, tstop, status) ~ transition + Age + BMI + ApacheIIScore + inMV2_4 + 
+             Propofol2_4 + EN2_4 + PN2_4 + OralIntake2_4 +
+             Year + AdmCatID + DiagID2 + Gender + CombinedicuID,
+  id = "id",
+  multiple_id = TRUE
+)
+
+```
+
+```{r main analysis graphic}
+# Fit the model using bam()
+model <- bam(
+  formula = ped_status ~ s(tend) + transition + s(Age) + s(BMI) + ApacheIIScore + 
+                         inMV2_4 + Propofol2_4 + EN2_4 + PN2_4 + OralIntake2_4 +
+                         Year + AdmCatID + DiagID2 + Gender +
+                         s(CombinedicuID, bs = "re"),
+  family = poisson(), 
+  data = ped_data,
+  offset = offset,
+  method = "fREML",
+  discrete = TRUE
+)
+
+# Create prediction dataset
+nd <- make_newdata(
+  ped_data,
+  transition = unique(ped_data$transition),
+  tend = unique(tend),
+)
+
+# Add transition probabilities from the log-hazard model
+nd_probs <- nd %>%
+  group_by(transition) %>%
+  add_hazard(model) |>
+  add_trans_prob(model)
+
+# Basic plot with facets by transition
+ggplot(nd_probs, aes(x = tend, y = trans_prob)) +
+  geom_line() +
+  facet_wrap(~ transition)
+
+# Enhanced plot with color and labels
+ggplot(nd_probs, aes(x = tend, y = trans_prob, color = transition)) +
+  geom_line(size = 1.2) +
+  labs(
+    title = "Transition Probabilities from Day 5 to Day 60",
+    x = "Time since ICU Day 5",
+    y = "Transition Probability",
+    color = "Transition"
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 14),
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "bottom"
+  ) + facet_wrap(~ transition)
+
+```
+
+
+```{r sensitivity analysis}
+# Step 1: Identify start/stop of Propofol and death within 1–2 days
+data_daily <- data_merged %>%
+  arrange(CombinedID, Study_Day) %>%
+  group_by(CombinedID) %>%
+  mutate(
+    Propofol = as.integer(as.character(Propofol)),
+    Propofol_Start = Propofol == 1 & lag(Propofol, default = 0) == 0,
+    Propofol_Stop  = Propofol == 0 & lag(Propofol, default = 1) == 1,
+    Death_1_2_After_Use = lead(PatientDied, 1) == 1 | lead(PatientDied, 2) == 1,
+    Death_1_2_After_Stop = PatientDied == 1 & (lag(Propofol, 1) == 1 | lag(Propofol, 2) == 1),
+    IgnoreDeathA = Propofol_Stop & Death_1_2_After_Stop,
+    IgnoreDeathB = Propofol_Start & Death_1_2_After_Use
+  ) %>%
+  ungroup()
+
+# Step 2: Merge with daily transition data and define adjusted status
+data_expanded_sens <- data_expanded %>%
+  left_join(
+    data_daily %>% select(CombinedID, Study_Day, IgnoreDeathA, IgnoreDeathB),
+    by = c("id" = "CombinedID", "tstart" = "Study_Day")
+  ) %>%
+  mutate(
+    status_adj = case_when(
+      transition == "1->3" & IgnoreDeathA ~ 0L,
+      transition == "0->3" & IgnoreDeathB ~ 0L,
+      TRUE ~ status
+    )
+  )
+
+# Step 3a: Compute 2× Propofol days for each patient
+leadtime_tbl <- data_merged %>%
+  filter(Study_Day >= 5) %>%
+  mutate(Propofol = as.integer(as.character(Propofol))) %>%
+  group_by(CombinedID) %>%
+  summarise(
+    propofol_days = sum(Propofol == 1, na.rm = TRUE),
+    lead_time = 2 * propofol_days,
+    .groups = "drop"
+  )
+
+# Step 3b: Add lead time to data
+data_expanded_sens <- data_expanded_sens %>%
+  left_join(leadtime_tbl, by = c("id" = "CombinedID"))
+
+# Step 4: Expand time to daily intervals and restrict max ICU stay to 60 days
+expand_to_days <- function(df) {
+  df %>%
+    rowwise() %>%
+    do({
+      if (.$tstop - .$tstart > 1) {
+        tibble(
+          id = .$id,
+          from = .$from,
+          to = .$to,
+          transition = .$transition,
+          status_adj = .$status_adj,
+          Age = .$Age,
+          BMI = .$BMI,
+          ApacheIIScore = .$ApacheIIScore,
+          inMV2_4 = .$inMV2_4,
+          Propofol2_4 = .$Propofol2_4,
+          EN2_4 = .$EN2_4,
+          PN2_4 = .$PN2_4,
+          OralIntake2_4 = .$OralIntake2_4,
+          Year = .$Year,
+          AdmCatID = .$AdmCatID,
+          DiagID2 = .$DiagID2,
+          Gender = .$Gender,
+          CombinedicuID = .$CombinedicuID,
+          lead_time = .$lead_time,
+          tstart = seq(.$tstart, .$tstop - 1),
+          tstop = seq(.$tstart + 1, .$tstop)
+        )
+      } else {
+        tibble(
+          id = .$id,
+          from = .$from,
+          to = .$to,
+          transition = .$transition,
+          status_adj = .$status_adj,
+          Age = .$Age,
+          BMI = .$BMI,
+          ApacheIIScore = .$ApacheIIScore,
+          inMV2_4 = .$inMV2_4,
+          Propofol2_4 = .$Propofol2_4,
+          EN2_4 = .$EN2_4,
+          PN2_4 = .$PN2_4,
+          OralIntake2_4 = .$OralIntake2_4,
+          Year = .$Year,
+          AdmCatID = .$AdmCatID,
+          DiagID2 = .$DiagID2,
+          Gender = .$Gender,
+          CombinedicuID = .$CombinedicuID,
+          lead_time = .$lead_time,
+          tstart = .$tstart,
+          tstop = .$tstop
+        )
+      }
+    }) %>%
+    ungroup()
+}
+
+# Step 5: Expand + apply 60-day restriction
+data_expanded_days_sens <- expand_to_days(data_expanded_sens) %>%
+  filter(tstop > tstart, tstop > 0, tstop <= 60)
+
+# Step 6: Add lead_active variable (within 2x Propofol days)
+data_expanded_days_sens <- data_expanded_days_sens %>%
+  mutate(lead_active = as.integer(tstart <= (4 + lead_time)))
+
+# Step 7: Create PED object
+ped_data_sens <- as_ped(
+  data = data_expanded_days_sens,
+  formula = Surv(tstart, tstop, status_adj) ~ transition + Age + BMI + ApacheIIScore +
+    inMV2_4 + Propofol2_4 + EN2_4 + PN2_4 + OralIntake2_4 +
+    Year + AdmCatID + DiagID2 + Gender + CombinedicuID + lead_active,
+  id = "id",
+  multiple_id = TRUE
+)
+
+```
+
+
+```{r comparision graphics modelling}
+# Fit main analysis model (if not already fitted)
+model_main <- bam(
+  ped_status ~ s(tend) + transition + s(Age) + s(BMI) + ApacheIIScore +
+    inMV2_4 + Propofol2_4 + EN2_4 + PN2_4 + OralIntake2_4 +
+    Year + AdmCatID + DiagID2 + Gender +
+    s(CombinedicuID, bs = "re"),
+  family = poisson(),
+  data = ped_data,
+  offset = offset,
+  method = "fREML",
+  discrete = TRUE
+)
+
+# Fit sensitivity analysis model
+model_sens <- bam(
+  ped_status ~ s(tend) + transition + s(Age) + s(BMI) + ApacheIIScore +
+    inMV2_4 + Propofol2_4 + EN2_4 + PN2_4 + OralIntake2_4 +
+    Year + AdmCatID + DiagID2 + Gender +
+    s(CombinedicuID, bs = "re"),
+  family = poisson(),
+  data = ped_data_sens,
+  offset = offset,
+  method = "fREML",
+  discrete = TRUE
+)
+
+# Create prediction dataset (Day 5 to Day 60, i.e., tend = 1:60)
+nd <- make_newdata(
+  ped_data,
+  transition = unique(ped_data$transition),
+  tend = 1:60
+)
+
+# Predict transition probabilities from main model
+nd_main <- nd %>%
+  group_by(transition) %>%
+  add_hazard(model_main) %>%
+  add_trans_prob(model_main) %>%
+  mutate(model = "Main")
+
+# Predict transition probabilities from sensitivity model
+nd_sens <- nd %>%
+  group_by(transition) %>%
+  add_hazard(model_sens) %>%
+  add_trans_prob(model_sens) %>%
+  mutate(model = "Sensitivity")
+
+# Combine results from main and sensitivity models
+nd_all <- bind_rows(nd_main, nd_sens)
+
+```
+
+```{r graphic}
+# Recode transition labels
+nd_all$transition <- recode_factor(
+  nd_all$transition,
+  "0->1" = "Kein Propofol → Propofol",
+  "0->2" = "Kein Propofol → Entlassung",
+  "0->3" = "Kein Propofol → Tod",
+  "1->0" = "Propofol → Kein Propofol",
+  "1->3" = "Propofol → Tod"
+)
+
+# Recode model labels
+nd_all$model <- recode_factor(
+  nd_all$model,
+  "Main" = "Hauptanalyse",
+  "Sensitivity" = "Sensitivität"
+)
+
+# Plot comparison of transition probabilities (Main vs. Sensitivity)
+ggplot(nd_all, aes(x = tend + 4, y = trans_prob, color = model)) +
+  geom_line(size = 1.2) +
+  facet_wrap(~ transition, ncol = 3) +
+  labs(
+    title = "Modellierte Übergangswahrscheinlichkeiten (Main vs Sensitivität)",
+    x = "Tage seit ICU-Aufnahme",
+    y = "Geschätzte Übergangswahrscheinlichkeit",
+    color = "Modell"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 12),
+    strip.text = element_text(size = 8),
+    axis.title = element_text(size = 10),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 10)
+  )
+
+# save the graphic
+ggsave(
+ filename = "results/Sen.Analyse.png", plot = plot_subgroup,
+width = 10,
+height = 6,
+ dpi = 300,
+ bg = "white")
+
+```
