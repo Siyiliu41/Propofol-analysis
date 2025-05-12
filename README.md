@@ -25,7 +25,7 @@ Propofol-analysis/
 ├── Propofol_Analyse_Bericht.pdf
 ├── sessionInfo.txt
 └── README.md
-###
+
 ## ▶️ Run Order
 
 Run the following scripts **in this exact order** to reproduce the full analysis:
