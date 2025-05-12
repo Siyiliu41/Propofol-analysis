@@ -4,7 +4,7 @@ library(mgcv)
 library(tidyr)
 library(ggplot2)
 
-setwd("~/Documents/Propofol1/pammtools")
+setwd("~/Documents/Propofol-analysis/pammtools")
 devtools::load_all()
 
 # Erstellung einer Spalte, die die Dauer der Propofol-Therapie für jeden Patienten anzeigt
@@ -154,4 +154,5 @@ ggplot(ndf_complex, aes(x = tend, y = PropofolDuration, z = trans_prob)) +
     plot.title = element_text(size = 16, face = "bold")
   )
 
-ggsave("transition_probs.png", plot = last_plot(), width = 10, height = 6, dpi = 300)
+ggsave("models/results/transition_probs.png", plot = last_plot(), width = 10, height = 6, dpi = 300,
+       bg = "white")
