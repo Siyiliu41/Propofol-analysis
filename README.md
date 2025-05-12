@@ -27,7 +27,7 @@ Propofol-analysis/
 
 Run the following scripts **in this exact order** to reproduce the full analysis:
 
-1. `Patientenstatus.R`  
+1. `models/Patientenstatus.R`  
    Descriptive analysis
 
 2. `models/models-main.Rmd`  
@@ -39,7 +39,7 @@ Run the following scripts **in this exact order** to reproduce the full analysis
 4. `models/MultiStateAnalysis.R`  
    Alternative implementation and model comparison code.
 
-5. `Sensitivity Analysis.Rmd`  
+5. `models/Sensitivity Analysis.Rmd`  
    Runs the sensitivity analysis excluding palliative care deaths (1–2 days after propofol change).
 
 ## 💡 Notes
