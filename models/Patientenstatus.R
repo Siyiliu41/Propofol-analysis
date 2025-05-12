@@ -1,7 +1,10 @@
-
+library(dplyr)
+library(ggplot2)
 
 #read the rds data
-data_merged <- readRDS("data/mergedAndCleanedData.rds")
+data_merged <- readRDS("~/Propofol-analysis/data/mergedAndCleanedData.Rds")
+data_patient <- readRDS("~/Propofol-analysis/data/patient.Rds")
+
 data_unique <- data_merged %>%
   group_by(CombinedID) %>%
   summarise(
@@ -11,7 +14,7 @@ data_unique <- data_merged %>%
     .groups = "drop"
   )
 
-data_patient <- readRDS("data/patient.rds")
+
 
 data_unique <- data_unique %>%
   left_join(data_patient %>% select(CombinedID, Age), by = "CombinedID")
@@ -22,8 +25,6 @@ print(status_table)
 event_count <- sum(data_unique$status != 0)
 print(event_count)
 
-library(ggplot2)
-library(dplyr)
 
 
 status_labels <- c(
@@ -50,7 +51,7 @@ farben <- c(
 )
 
 
-ggplot(status_df, aes(x = status, y = percent, fill = status)) +
+Patientenstatus<-ggplot(status_df, aes(x = status, y = percent, fill = status)) +
   geom_col() +
   geom_text(
     aes(label = paste0(round(percent, 1), "%\n(", count, ")")),
@@ -67,11 +68,13 @@ ggplot(status_df, aes(x = status, y = percent, fill = status)) +
   theme_minimal(base_size = 14) +
   theme(legend.position = "none")  
 
+Patientenstatus
 
-library(dplyr)
-library(ggplot2)
+ggsave("models/results/Patientenstatus.png", plot = Patientenstatus, width = 10, height = 6, dpi = 300,
+       bg = "white")
 
-data_propofol_status <- mergedAndCleanedData %>%
+
+data_propofol_status <- data_merged %>%
   group_by(CombinedID) %>%
   summarise(
     propofol = ifelse(any(Propofol == 1, na.rm = TRUE), 1, 0),
@@ -79,7 +82,7 @@ data_propofol_status <- mergedAndCleanedData %>%
   )
 
 
-data_unique <- mergedAndCleanedData %>%
+data_unique <- data_merged %>%
   group_by(CombinedID) %>%
   summarise(
     status = max(surv_icu_status, na.rm = TRUE),
