@@ -9,7 +9,7 @@ data_unique <- data_merged %>%
     .groups = "drop"
   )
 
-data_patient <- readRDS("~/Propofol-analysis/data/patient.rds")
+data_patient <- readRDS("~/Propofol-analysis/data/patient.Rds")
 
 data_unique <- data_unique %>%
   left_join(data_patient %>% select(CombinedID, Age), by = "CombinedID")
