@@ -1,7 +1,5 @@
-
-
 #read the rds data
-data_merged <- readRDS("data/mergedAndCleanedData.rds")
+data_merged <- readRDS("~/Propofol-analysis/data/mergedAndCleanedData.Rds"")
 data_unique <- data_merged %>%
   group_by(CombinedID) %>%
   summarise(
@@ -11,7 +9,7 @@ data_unique <- data_merged %>%
     .groups = "drop"
   )
 
-data_patient <- readRDS("data/patient.rds")
+data_patient <- readRDS("~/Propofol-analysis/data/patient.rds")
 
 data_unique <- data_unique %>%
   left_join(data_patient %>% select(CombinedID, Age), by = "CombinedID")
@@ -71,7 +69,7 @@ ggplot(status_df, aes(x = status, y = percent, fill = status)) +
 library(dplyr)
 library(ggplot2)
 
-data_propofol_status <- mergedAndCleanedData %>%
+data_propofol_status <- data_merged %>%
   group_by(CombinedID) %>%
   summarise(
     propofol = ifelse(any(Propofol == 1, na.rm = TRUE), 1, 0),
@@ -79,7 +77,7 @@ data_propofol_status <- mergedAndCleanedData %>%
   )
 
 
-data_unique <- mergedAndCleanedData %>%
+data_unique <- data_merged %>%
   group_by(CombinedID) %>%
   summarise(
     status = max(surv_icu_status, na.rm = TRUE),
