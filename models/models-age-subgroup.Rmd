@@ -1,0 +1,116 @@
+---
+title: "models-age-subgroup"
+output: html_document
+date: "2025-05-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(tidyr) 
+library(pammtools)
+library(mgcv)  
+library(ggplot2)
+```
+
+```{r}
+# Count number of patients in each age group
+data_agegroup <- data_patient %>%
+  mutate(age_group = ifelse(Age > 65, "> 65 Jahre", "≤ 65 Jahre")) %>%
+  count(age_group, name = "Patienten")
+
+print(data_agegroup)
+```
+
+
+```{r}
+#Subgroup Analysis
+
+ped_data_65plus <- ped_data %>% filter(Age > 65)
+ped_data_65minus <- ped_data %>% filter(Age <= 65)
+
+model_65plus <- bam(
+  formula = ped_status ~ s(tend) + transition + s(Age) + s(BMI) + ApacheIIScore + 
+    inMV2_4 + Propofol2_4 + EN2_4 + PN2_4 + OralIntake2_4 +
+    Year + AdmCatID + DiagID2 + Gender +
+    s(CombinedicuID, bs = "re"),
+  family = poisson(), 
+  data = ped_data_65plus,
+  offset = offset,
+  method = "fREML",
+  discrete = TRUE
+)
+
+model_65minus <- bam(
+  formula = formula(model_65plus),
+  data = ped_data_65minus,
+  family = poisson(),
+  offset = offset,
+  method = "fREML",
+  discrete = TRUE
+)
+
+
+tvec <- seq(5, 60, by = 1)
+transitions <- unique(ped_data$transition)
+
+nd_65plus <- make_newdata(ped_data_65plus, tend = tvec, transition = transitions)
+nd_65minus <- make_newdata(ped_data_65minus, tend = tvec, transition = transitions)
+
+
+nd_65plus <- nd_65plus %>%
+  group_by(transition) %>%
+  add_hazard(model_65plus) %>%
+  add_trans_prob(model_65plus) %>%
+  mutate(AgeGroup = "> 65")
+
+nd_65minus <- nd_65minus %>%
+  group_by(transition) %>%
+  add_hazard(model_65minus) %>%
+  add_trans_prob(model_65minus) %>%
+  mutate(AgeGroup = "≤ 65")
+
+nd_combined <- bind_rows(nd_65plus, nd_65minus)
+
+nd_combined <- nd_combined %>%
+  mutate(transition_label = recode(transition,
+    "0->1" = "Kein Propofol → Propofol",
+    "0->2" = "Kein Propofol → Entlassung",
+    "0->3" = "Kein Propofol → Tod",
+    "1->0" = "Propofol → Kein Propofol",
+    "1->3" = "Propofol → Tod"
+  ))
+
+plot_subgroup <- ggplot(nd_combined, aes(x = tend, y = trans_prob, color = AgeGroup))+
+  geom_line(linewidth = 1) +
+  scale_color_manual(
+    values = c("≤ 65" = "#66C2A5", "> 65" = "#FC8D62")
+  )+
+  facet_wrap(~ transition_label) +
+  labs(
+    title = "Übergangswahrscheinlichkeiten nach Altersgruppe",
+    x = "Tage seit ICU-Aufnahme",
+    y = "Übergangswahrscheinlichkeit",
+    color = "Altersgruppe"
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(size = 13),
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold", hjust = 0.5)
+  )
+
+plot_subgroup
+
+```
+
+```{r}
+
+ggsave(
+ filename = "results/transition_probs_by_agegroup.png", plot = plot_subgroup,
+width = 10,
+height = 6,
+ dpi = 300,
+ bg = "white")
+
+```
