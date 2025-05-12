@@ -1,13 +1,11 @@
 # Propofol-analysis
 This repository contains the full code for modeling ICU transitions in relation to propofol use, using multi-state models and sensitivity analyses.
 
-### Required Files and Folders
-
+Folder Structure
 Before running any code, make sure your folder structure looks like this:
-
-```
 Propofol-analysis/
 ├── data/
+│   ├── ICU.Rds
 │   ├── daily.Rds
 │   ├── daily_all.Rds
 │   ├── excluded.csv
@@ -17,11 +15,14 @@ Propofol-analysis/
 ├── models/
 │   ├── models-main.Rmd
 │   ├── models-age-subgroup.Rmd
-│   └── MultiStateAnalysis.R
-├── Patientenstatus.R
-├── Sensitivity Analysis.Rmd
-├── README.md
-```
+│   ├── Sensitivity Analysis.Rmd
+│   ├── MultiStateAnalysis.R
+│   └── Patientenstatus.R
+├── preproc-data.R
+├── preproc-helpers.R
+├── Propofol_Analyse_Bericht.pdf
+├── sessionInfo.txt
+└── README.md
 
 ## ▶️ Run Order
 
