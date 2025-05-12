@@ -5,27 +5,7 @@ This repository contains the full code for modeling ICU transitions in relation 
 
 Before running any code, make sure your folder structure looks like this:
 
-Propofol-analysis/
-├── data/
-│ ├── ICU.Rds
-│ ├── daily.Rds
-│ ├── daily_all.Rds
-│ ├── excluded.csv
-│ ├── excluded_ids.Rds
-│ ├── mergedAndCleanedData.Rds
-│ └── patient.Rds
-├── models/
-│ ├── models-main.Rmd
-│ ├── models-age-subgroup.Rmd
-│ ├── Sensitivity Analysis.Rmd
-│ ├── MultiStateAnalysis.R
-│ └── Patientenstatus.R
-├── preproc-data.R
-├── preproc-helpers.R
-├── Propofol_Analyse_Bericht.pdf
-├── sessionInfo.txt
-└── README.md
-
+<pre> ```text Propofol-analysis/ ├── data/ │ ├── ICU.Rds │ ├── daily.Rds │ ├── daily_all.Rds │ ├── excluded.csv │ ├── excluded_ids.Rds │ ├── mergedAndCleanedData.Rds │ └── patient.Rds ├── models/ │ ├── models-main.Rmd │ ├── models-age-subgroup.Rmd │ ├── Sensitivity Analysis.Rmd │ ├── MultiStateAnalysis.R │ └── Patientenstatus.R ├── preproc-data.R ├── preproc-helpers.R ├── Propofol_Analyse_Bericht.pdf ├── sessionInfo.txt └── README.md ``` </pre>
 ## ▶️ Run Order
 
 Run the following scripts **in this exact order** to reproduce the full analysis:
