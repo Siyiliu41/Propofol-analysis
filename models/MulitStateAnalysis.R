@@ -156,3 +156,35 @@ ggplot(ndf_complex, aes(x = tend, y = PropofolDuration, z = trans_prob)) +
 
 ggsave("models/results/transition_probs.png", plot = last_plot(), width = 10, height = 6, dpi = 300,
        bg = "white")
+# Extrahiere die parametrische Koeffizienten-Tabelle
+p_tab <- summary(model_propofol_dauer)$p.table %>%
+  as.data.frame(rownames = "term") %>%
+  rename(
+    estimate = Estimate,
+    std.error = `Std. Error`,
+    z = `z value`,
+    p.value = `Pr(>|z|)`
+  ) %>%
+  # Berechne 95%-Konfidenzintervalle
+  mutate(
+    conf.low  = estimate - 1.96 * std.error,
+    conf.high = estimate + 1.96 * std.error
+  )
+
+# auch die Glättungstermine anzeigen
+s_tab <- summary(model_propofol_dauer)$s.table %>%
+  as.data.frame(rownames = "smooth") %>%
+  rename(
+    edf = edf,
+    ref.df = Ref.df,
+    chi.sq = `Chi.sq`,
+    p.value = `p-value`
+  )
+
+# Zusammenführen zu einer "langen" Übersicht (parametrisch + smooth)
+param_df <- p_tab %>% mutate(type = "parametric")
+smooth_df <- s_tab %>% select(smooth, edf, ref.df, chi.sq, p.value) %>% 
+  mutate(type = "smooth")
+
+# Falls du nur parametrische Effekte in einer Tabelle brauchst, reiche param_df.
+write.csv(param_df, "parametric_effects_table.csv", row.names = TRUE)
