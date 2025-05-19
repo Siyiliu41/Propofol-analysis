@@ -143,7 +143,7 @@ ggplot(ndf_complex, aes(x = tend, y = PropofolDuration, z = trans_prob)) +
   xlim(0, 60) +
   ylim(0, 7) +
   labs(
-    title = "Transition Probabilities nach Aufenthalts- und Propofol-Dauer",
+    title = "Übergangswahrscheinlichkeiten nach Aufenthalts- und Propofol-Dauer",
     x = "Zeit in ICU (Tage)",
     y = "Propofol-Therapiedauer (Tage)"
   ) +
