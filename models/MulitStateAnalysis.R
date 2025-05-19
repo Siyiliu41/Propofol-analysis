@@ -156,6 +156,7 @@ ggplot(ndf_complex, aes(x = tend, y = PropofolDuration, z = trans_prob)) +
 
 ggsave("models/results/transition_probs.png", plot = last_plot(), width = 10, height = 6, dpi = 300,
        bg = "white")
+
 # Extrahiere die parametrische Koeffizienten-Tabelle
 p_tab <- summary(model_propofol_dauer)$p.table %>%
   as.data.frame(rownames = "term") %>%
