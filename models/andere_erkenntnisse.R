@@ -58,7 +58,7 @@ ggplot(ndf_BMI, aes(x = tend, y = PropofolDuration, z = trans_prob)) +
 
 ggsave("transition_probs_bmi.png", plot = last_plot(), width = 10, height = 6, dpi = 300)
 
-# 2 Gender
+# 2 Ge
 library(survival)
 library(mgcv)
 library(ggplot2)
@@ -183,4 +183,52 @@ ggplot(ndf_gender_ci, aes(x = tend)) +
 
 ggsave("transition_probs_gender_ci.png", plot = last_plot(), width = 10, height = 6, dpi = 300)
 
-# 3
+# 3 Zulassungkategorie
+model_admcat <- bam(
+  ped_status ~ s(tend, by = transition) + AdmCatID * transition +
+    s(BMI) + s(Age) + ApacheIIScore + 
+    inMV2_4 + Propofol2_4 + EN2_4 + PN2_4 + OralIntake2_4 +
+    Year + DiagID2 + Gender + 
+    s(CombinedicuID, bs = "re"),
+  family = poisson(),
+  data = ped_data,
+  offset = offset,
+  method = "fREML",
+  discrete = TRUE
+)
+
+summary(model_admcat)
+
+ndf_admcat <- make_newdata(
+  ped_data,
+  tend = unique(tend),
+  AdmCatID = unique(AdmCatID),
+  transition = unique(transition)
+) %>%
+  group_by(transition, AdmCatID) %>%
+  add_trans_prob(model_admcat)
+
+ggplot(ndf_admcat, aes(x = tend)) +
+  geom_line(aes(y = trans_prob, col = AdmCatID ), linewidth = 0.8) +
+  scale_color_manual(
+    values = c(
+      "Medical" = "#332288",      
+      "Surgical/Elective" = "#88CCEE",  
+      "Surgical/Emeregency" = "#117733" 
+    )
+  ) +
+  facet_wrap(~ transition , labeller = labeller(transition = transition_labels)) +
+  labs(
+    title = "Übergangswahrscheinlichkeiten nach Zeit in ICU und Zulassungskategorie",
+    x = "Zeit in ICU (Tage)",
+    y = "Übergangswahrscheinlichkeit",
+    color = "Zulassungskategorie"
+  ) +
+  theme_minimal(base_size = 15) +
+  theme(
+    strip.text = element_text(size = 13, face = "bold"),
+    legend.position = "top",
+    plot.title = element_text(size = 16, face = "bold")
+  )
+
+ggsave("transition_probs_admcat.png", plot = last_plot(), width = 10, height = 6, dpi = 300)
